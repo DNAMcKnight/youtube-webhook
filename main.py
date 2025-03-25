@@ -111,36 +111,64 @@ async def get_channel_ids(category):
     return False
 
 
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+import isodate
+import requests
+
 def get_videos(youtube, channels, iso_time, url):
     video_data = []
     for channel in channels:
-        video = youtube.activities().list(
-            part="snippet,contentDetails",
-            channelId=channel,
-            publishedAfter=iso_time,
-            maxResults=50,
-        )
-        resp_vdo = video.execute()
-        for i in resp_vdo["items"]:
-            try:
-                video_title = i["snippet"]["title"]
-                video_pub_time = i["snippet"]["publishedAt"]
-                if video_title:
-                    video_link = i["contentDetails"]["upload"]["videoId"]
+        try:
+            # Fetch the list of activities for the channel
+            activities = youtube.activities().list(
+                part="contentDetails",
+                channelId=channel,
+                publishedAfter=iso_time,
+                maxResults=50,
+            ).execute()
+
+            # Extract video IDs from the activities
+            video_ids = [
+                item["contentDetails"]["upload"]["videoId"]
+                for item in activities.get("items", [])
+                if "upload" in item["contentDetails"]
+            ]
+
+            if not video_ids:
+                continue
+
+            # Fetch video details including duration
+            video_response = youtube.videos().list(
+                part="snippet,contentDetails",
+                id=",".join(video_ids),
+            ).execute()
+
+            for video in video_response.get("items", []):
+                duration = isodate.parse_duration(video["contentDetails"]["duration"])
+                if duration.total_seconds() > 60:  # Exclude videos 60 seconds or shorter
+                    video_title = video["snippet"]["title"]
+                    video_pub_time = video["snippet"]["publishedAt"]
+                    video_link = f"https://youtu.be/{video['id']}"
                     usable_data = {
-                        "publishedAt": i["snippet"]["publishedAt"],
-                        "channelId": i["snippet"]["channelId"],
-                        "title": i["snippet"]["title"],
-                        "thumbnails": i["snippet"]["thumbnails"]["high"],
-                        "url": f"https://youtu.be/{video_link}",
-                        "type": i["snippet"]["type"],
+                        "publishedAt": video_pub_time,
+                        "channelId": video["snippet"]["channelId"],
+                        "title": video_title,
+                        "thumbnails": video["snippet"]["thumbnails"]["high"],
+                        "url": video_link,
+                        "type": video["kind"],
                     }
                     video_data.append(usable_data)
-                    response = requests.post(url, json={"content":f"https://youtu.be/{video_link}"})
-                    print(video_title + "\t" + video_pub_time + "\t" + str(response.status_code))
-            except KeyError:
-                pass
+                    response = requests.post(url, json={"content": video_link})
+                    print(f"{video_title}\t{video_pub_time}\t{response.status_code}")
+                else:
+                    print(f"Ignoring short {video["snippet"]["title"]}")
+        except HttpError as e:
+            print(f"An HTTP error {e.resp.status} occurred: {e.content}")
+        except KeyError as e:
+            print(f"KeyError: {e}")
     return video_data
+
 
 async def add_youtube_data(data):
     client = AsyncIOMotorClient(os.getenv('KnightBot_database'))
