@@ -48,7 +48,7 @@ async def main():
 
 def authenticaiton():
     global credentials
-    client_secret = os.path.normpath(os.getcwd() + os.sep + os.pardir)
+    client_secret = os.getenv("client_secret_path")
     if os.path.exists("token.pickle"):
         print("Loading Credentials From File...")
         with open("token.pickle", "rb") as token:
@@ -62,7 +62,7 @@ def authenticaiton():
             return
         print("Fetching New Tokens...")
         flow = InstalledAppFlow.from_client_secrets_file(
-            f"{client_secret}/json/client_secret.json",
+            f"{client_secret}",
             scopes=["https://www.googleapis.com/auth/youtube.readonly"],
         )
 
