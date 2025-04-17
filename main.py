@@ -146,7 +146,8 @@ def get_videos(youtube, channels, iso_time, url):
 
             for video in video_response.get("items", []):
                 duration = isodate.parse_duration(video["contentDetails"]["duration"])
-                if duration.total_seconds() > 60:  # Exclude videos 60 seconds or shorter
+                minimum_duration = int(os.getenv("minimum_duration"))
+                if duration.total_seconds() > minimum_duration:  # Exclude videos 60 seconds or shorter
                     video_title = video["snippet"]["title"]
                     video_pub_time = video["snippet"]["publishedAt"]
                     video_link = f"https://youtu.be/{video['id']}"
